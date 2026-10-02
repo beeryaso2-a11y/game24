@@ -18,6 +18,7 @@ body{margin:0;min-height:100vh;background:linear-gradient(160deg,var(--bg1),var(
 .title{display:flex;align-items:center;justify-content:center;gap:10px;margin:6px 0 4px}
 .title h1{margin:0;font-size:30px;letter-spacing:.5px}
 .badge{background:linear-gradient(135deg,var(--c1),var(--acc));color:#fff;font-weight:700;font-size:26px;padding:2px 14px;border-radius:14px;box-shadow:0 6px 16px rgba(124,77,255,.35)}
+.title{position:relative}.mute{position:absolute;right:0;top:50%;transform:translateY(-50%);width:40px;height:40px;font-size:18px;border-radius:50%;border:1px solid var(--line);background:var(--card);cursor:pointer}
 .sub{text-align:center;color:var(--mut);margin:0 0 16px;font-size:13.5px;line-height:1.5}
 .stats{display:flex;gap:8px;margin-bottom:16px}
 .stat{flex:1;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:8px 6px;text-align:center;backdrop-filter:blur(8px)}
@@ -53,7 +54,7 @@ box-shadow:0 8px 0 rgba(0,0,0,.18),0 12px 22px rgba(0,0,0,.12);transition:transf
 </head>
 <body>
 <div class="app">
-  <div class="title"><h1>เกม</h1><span class="badge">24</span></div>
+  <div class="title"><h1>เกม</h1><span class="badge">24</span><button class="mute" id="mute" aria-label="เสียง">🔊</button></div>
   <p class="sub">ใช้ + − × ÷ กับเลขทั้ง 4 ตัว (ใช้ครบทุกตัว ตัวละครั้งเดียว) ให้ได้ 24</p>
   <div class="stats"><div class="stat"><b id="win">0</b><span>🏆 ชนะ</span></div><div class="stat"><b id="streak">0</b><span>🔥 ติดต่อกัน</span></div><div class="stat"><b id="hints">0</b><span>💡 ดูเฉลย</span></div></div>
   <div class="grid" id="grid"></div>
@@ -104,6 +105,11 @@ function reset(){
   items=orig.map(n=>({v:n,e:String(n)})); history=[]; selA=null; selOp=null; solved=false;
   msg(''); render();
 }
+let ac,muted=false;
+function tone(f,d=.12,type='sine',vol=.16,when=0){if(muted)return;try{ac=ac||new(window.AudioContext||window.webkitAudioContext)();if(ac.state==='suspended')ac.resume();const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+when;o.type=type;o.frequency.value=f;g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.001,t+d);o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+d);}catch(e){}}
+const sfx={merge:()=>{tone(440,.12,'triangle');tone(660,.16,'triangle',.16,.08)},win:()=>[523,659,784,1047].forEach((f,i)=>tone(f,.28,'triangle',.18,i*.12)),bad:()=>{tone(220,.2,'sawtooth',.1);tone(165,.3,'sawtooth',.1,.15)},undo:()=>tone(330,.1,'square',.07)};
+document.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+if(b.classList.contains('num'))tone(520,.08,'sine');else if(b.classList.contains('op'))tone(700,.08,'triangle');else if(b.id==='mute'){muted=!muted;b.textContent=muted?'🔇':'🔊';if(!muted)tone(600,.08);}else if(b.id==='undo')sfx.undo();else tone(400,.09,'sine');});
 function confetti(){const cs=['#ff7a59','#ffb020','#31c48d','#4f8cff','#7c4dff'];for(let i=0;i<60;i++){const d=document.createElement('div');d.className='conf';d.style.left=Math.random()*100+'vw';d.style.background=cs[i%5];d.style.animationDelay=Math.random()*.4+'s';document.body.appendChild(d);setTimeout(()=>d.remove(),2500);}}
 function msg(t,c){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+(c||'');}
 function render(){
@@ -132,13 +138,13 @@ function clickNum(i){
   if(selA===i){selA=null;selOp=null;render();return;}
   if(selOp===null){selA=i;render();return;}
   const a=items[selA],b=items[i],v=apply(a.v,b.v,selOp);
-  if(v===null){msg('หารด้วย 0 ไม่ได้!','bad');return;}
-  history.push({items:items.slice(),step:`${fmt(a.v)} ${selOp} ${fmt(b.v)} = ${fmt(v)}`});
+  if(v===null){sfx.bad();msg('หารด้วย 0 ไม่ได้!','bad');return;}
+  sfx.merge();history.push({items:items.slice(),step:`${fmt(a.v)} ${selOp} ${fmt(b.v)} = ${fmt(v)}`});
   items[i]={v,e:''}; items[selA]=null; popIdx=i; selA=null; selOp=null;
   const left=items.filter(Boolean);
   if(left.length===1){
-    if(Math.abs(left[0].v-24)<EPS){solved=true;win++;streak++;msg('🎉 ถูกต้อง! ได้ 24 แล้ว','ok');confetti();}
-    else{streak=0;msg('ได้ '+fmt(left[0].v)+' ไม่ใช่ 24 ลองย้อนกลับดูนะ','bad');setTimeout(()=>document.querySelectorAll('.num:not(.gone)').forEach(n=>n.classList.add('shake')),30);}
+    if(Math.abs(left[0].v-24)<EPS){solved=true;win++;streak++;msg('🎉 ถูกต้อง! ได้ 24 แล้ว','ok');confetti();setTimeout(sfx.win,250);}
+    else{streak=0;setTimeout(sfx.bad,200);msg('ได้ '+fmt(left[0].v)+' ไม่ใช่ 24 ลองย้อนกลับดูนะ','bad');setTimeout(()=>document.querySelectorAll('.num:not(.gone)').forEach(n=>n.classList.add('shake')),30);}
   } else msg('');
   render(); popIdx=-1;
 }
