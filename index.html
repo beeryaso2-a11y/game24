@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>เกม 24</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f6f4ef;--card:#fff;--ink:#222;--mut:#777;--acc:#d9622b;--ok:#2e8b57;--bad:#c0392b;--line:#ddd}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1b1a18;--card:#2a2825;--ink:#f1eee8;--mut:#9a958b;--acc:#f08a52;--ok:#5cc08a;--bad:#e8695a;--line:#444}}
+:root[data-theme="dark"]{--bg:#1b1a18;--card:#2a2825;--ink:#f1eee8;--mut:#9a958b;--acc:#f08a52;--ok:#5cc08a;--bad:#e8695a;--line:#444}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans Thai",system-ui,sans-serif;display:flex;justify-content:center;padding:16px}
+.app{width:100%;max-width:420px}
+h1{text-align:center;margin:8px 0 2px;font-size:28px}
+.sub{text-align:center;color:var(--mut);margin:0 0 14px;font-size:14px}
+.stats{display:flex;justify-content:space-between;margin-bottom:12px;font-size:14px;color:var(--mut)}
+.stats b{color:var(--ink)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.num{height:90px;font-size:34px;font-weight:700;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:16px;cursor:pointer;transition:.12s}
+.num.sel{border-color:var(--acc);background:var(--acc);color:#fff;transform:scale(.97)}
+.num.gone{visibility:hidden}
+.num small{display:block;font-size:12px;font-weight:400;opacity:.7}
+.ops{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}
+.op{height:56px;font-size:26px;background:var(--card);color:var(--ink);border:2px solid var(--line);border-radius:14px;cursor:pointer}
+.op.sel{border-color:var(--acc);background:var(--acc);color:#fff}
+.msg{min-height:44px;text-align:center;font-size:17px;margin:6px 0;font-weight:600}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+.hist{min-height:60px;font-size:14px;color:var(--mut);text-align:center;margin-bottom:8px}
+.row{display:flex;gap:8px}
+.btn{flex:1;padding:12px 4px;font-size:15px;border-radius:12px;border:2px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer;font-family:inherit}
+.btn.main{background:var(--acc);border-color:var(--acc);color:#fff}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>🎯 เกม 24</h1>
+  <p class="sub">ใช้ + − × ÷ กับเลขทั้ง 4 ตัว (ใช้ครบทุกตัว ตัวละครั้งเดียว) ให้ได้ 24</p>
+  <div class="stats"><span>ชนะ: <b id="win">0</b></span><span>ติดต่อกัน: <b id="streak">0</b></span><span>ดูเฉลย: <b id="hints">0</b></span></div>
+  <div class="grid" id="grid"></div>
+  <div class="ops" id="ops"></div>
+  <div class="msg" id="msg"></div>
+  <div class="hist" id="hist"></div>
+  <div class="row">
+    <button class="btn" id="undo">↩ ย้อนกลับ</button>
+    <button class="btn" id="reset">🔄 เริ่มใหม่</button>
+    <button class="btn" id="hint">💡 เฉลย</button>
+    <button class="btn main" id="next">โจทย์ใหม่</button>
+  </div>
+</div>
+<script>
+const EPS=1e-6, OPS=['+','−','×','÷'];
+let items, history, selA, selOp, orig, solution, solved, win=0, streak=0, hints=0;
+
+function fmt(v){
+  if(Math.abs(v-Math.round(v))<EPS) return String(Math.round(v));
+  for(let d=2;d<=12;d++){const n=v*d; if(Math.abs(n-Math.round(n))<EPS) return Math.round(n)+'/'+d;}
+  return v.toFixed(2);
+}
+function apply(a,b,op){
+  if(op==='+') return a+b; if(op==='−') return a-b; if(op==='×') return a*b;
+  return Math.abs(b)<EPS?null:a/b;
+}
+function solve(arr){
+  if(arr.length===1) return Math.abs(arr[0].v-24)<EPS?arr[0].e:null;
+  for(let i=0;i<arr.length;i++)for(let j=0;j<arr.length;j++){
+    if(i===j) continue;
+    const rest=arr.filter((_,k)=>k!==i&&k!==j);
+    for(const op of OPS){
+      if((op==='+'||op==='×')&&i>j) continue;
+      const v=apply(arr[i].v,arr[j].v,op); if(v===null) continue;
+      const r=solve([...rest,{v,e:'('+arr[i].e+' '+op+' '+arr[j].e+')'}]);
+      if(r) return r;
+    }
+  }
+  return null;
+}
+function newPuzzle(){
+  let nums,sol;
+  do{ nums=Array.from({length:4},()=>1+Math.floor(Math.random()*9));
+      sol=solve(nums.map(n=>({v:n,e:String(n)}))); }while(!sol);
+  orig=nums; solution=sol.replace(/^\((.*)\)$/,'$1'); reset();
+}
+function reset(){
+  items=orig.map(n=>({v:n,e:String(n)})); history=[]; selA=null; selOp=null; solved=false;
+  msg(''); render();
+}
+function msg(t,c){const m=document.getElementById('msg');m.textContent=t;m.className='msg '+(c||'');}
+function render(){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  items.forEach((it,i)=>{
+    const b=document.createElement('button');
+    b.className='num'+(it===null?' gone':'')+(selA===i?' sel':'');
+    if(it) b.innerHTML=fmt(it.v);
+    b.onclick=()=>clickNum(i); g.appendChild(b);
+  });
+  const o=document.getElementById('ops'); o.innerHTML='';
+  OPS.forEach(op=>{
+    const b=document.createElement('button');
+    b.className='op'+(selOp===op?' sel':''); b.textContent=op;
+    b.onclick=()=>{ if(selA===null||solved) return; selOp=selOp===op?null:op; render(); };
+    o.appendChild(b);
+  });
+  document.getElementById('hist').innerHTML=history.map(h=>h.step).join('<br>');
+  document.getElementById('win').textContent=win;
+  document.getElementById('streak').textContent=streak;
+  document.getElementById('hints').textContent=hints;
+}
+function clickNum(i){
+  if(solved||!items[i]) return;
+  if(selA===null){selA=i;render();return;}
+  if(selA===i){selA=null;selOp=null;render();return;}
+  if(selOp===null){selA=i;render();return;}
+  const a=items[selA],b=items[i],v=apply(a.v,b.v,selOp);
+  if(v===null){msg('หารด้วย 0 ไม่ได้!','bad');return;}
+  history.push({items:items.slice(),step:`${fmt(a.v)} ${selOp} ${fmt(b.v)} = ${fmt(v)}`});
+  items[i]={v,e:''}; items[selA]=null; selA=null; selOp=null;
+  const left=items.filter(Boolean);
+  if(left.length===1){
+    if(Math.abs(left[0].v-24)<EPS){solved=true;win++;streak++;msg('🎉 ถูกต้อง! ได้ 24 แล้ว','ok');}
+    else{streak=0;msg('ได้ '+fmt(left[0].v)+' ไม่ใช่ 24 ลองย้อนกลับดูนะ','bad');}
+  } else msg('');
+  render();
+}
+document.getElementById('undo').onclick=()=>{
+  if(!history.length) return; items=history.pop().items; selA=selOp=null; solved=false; msg(''); render();
+};
+document.getElementById('reset').onclick=reset;
+document.getElementById('next').onclick=newPuzzle;
+document.getElementById('hint').onclick=()=>{ if(!solved){hints++;streak=0;} msg('เฉลย: '+solution+' = 24','ok'); render(); };
+newPuzzle();
+</script>
+</body>
+</html>
